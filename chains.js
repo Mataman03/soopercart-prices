@@ -28,6 +28,15 @@ function unzipFirst(b) {
 
 const bytes = async (url, opt) => { const r = await fetch(url, opt); if (!r.ok) throw new Error(`${r.status} ${url}`); return Buffer.from(await r.arrayBuffer()) };
 
+// Carrefour and Victory don't answer cloud servers (GitHub, Cloudflare), only home connections.
+// Their fetches give up after 20 seconds and say why (timeout, connection reset...) instead of just "fetch failed".
+const why = e => e.cause ? `${e.message} (${e.cause.code || e.cause.message})` : e.message;
+async function timed(url) {
+  try { return await fetch(url, { signal: AbortSignal.timeout(20000) }) }
+  catch (e) { throw new Error(why(e)) }
+}
+const timedBytes = async url => { const r = await timed(url); if (!r.ok) throw new Error(`${r.status} ${url}`); return Buffer.from(await r.arrayBuffer()) };
+
 // Cerberus: log in with the chain's public user name and an empty password, then list everything.
 function cerberus(user) {
   const BASE = "https://url.publishedprices.co.il";
@@ -70,19 +79,19 @@ function carrefour() {
   let dir;
   return {
     async list() {
-      const h = await (await fetch("https://prices.carrefour.co.il/")).text();
+      const h = await (await timed("https://prices.carrefour.co.il/")).text();
       dir = (h.match(/const path = '(\d+)'/) || [])[1];
       return [...new Set([...h.matchAll(/((?:PriceFull|Stores)[0-9A-Za-z_-]+\.(?:gz|xml|zip))/g)].map(m => m[1]))];
     },
-    get: async name => toText(await bytes(`https://prices.carrefour.co.il/${dir}/${name}`)),
+    get: async name => toText(await timedBytes(`https://prices.carrefour.co.il/${dir}/${name}`)),
   };
 }
 
 // Victory: a JSON list of files, each downloadable by name.
 function laib(chain) {
   return {
-    list: async () => (await (await fetch(`https://laibcatalog.co.il/webapi/api/getfiles?edi=${chain}`)).json()).map(f => f.fileName),
-    get: async name => toText(await bytes(`https://laibcatalog.co.il/webapi/${chain}/${name}`)),
+    list: async () => (await (await timed(`https://laibcatalog.co.il/webapi/api/getfiles?edi=${chain}`)).json()).map(f => f.fileName),
+    get: async name => toText(await timedBytes(`https://laibcatalog.co.il/webapi/${chain}/${name}`)),
   };
 }
 
