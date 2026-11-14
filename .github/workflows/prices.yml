@@ -15,8 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: קרפור וויקטורי מהמחשב בבית
+        run: git fetch -q --depth=1 origin pc && git show FETCH_HEAD:pc.json.gz > pc.json.gz || echo "no pc data yet"
       - name: הורדת מחירים
         run: node run.js out
+        env:
+          PC_FILE: pc.json.gz
       - name: שמירה בענף data
         run: |
           cd out
@@ -27,4 +31,4 @@ jobs:
           git commit -q -m "prices $(date -u +%F)"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
       - name: בדיקה שכל הרשתות ירדו
-        run: node -e "const f=require('./out/prices.json').failed;if(Object.keys(f).length){console.log(f);process.exit(1)}"
+        run: node -e "const j=require('./out/prices.json');const p={...j.failed,...j.warnings};if(Object.keys(p).length){console.log(p);process.exit(1)}"
